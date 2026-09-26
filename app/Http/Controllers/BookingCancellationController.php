@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\PaymentTransaction;
 use App\Models\Room;
+use App\Models\Setting;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,48 +15,40 @@ class BookingCancellationController extends Controller {
         $data = $request->validate([
             'refund_khr_cash' => 'nullable|numeric|min:0',
             'refund_khr_bank' => 'nullable|numeric|min:0',
+            'refund_usd_bank' => 'nullable|numeric|min:0',
             'shift' => 'nullable|string',
             'handled_by' => 'nullable|string',
         ]);
 
         $kCash = (float)($data['refund_khr_cash'] ?? 0);
         $kBank = (float)($data['refund_khr_bank'] ?? 0);
-        $totalRefund = $kCash + $kBank;
+        $uBank = (float)($data['refund_usd_bank'] ?? 0);
+        $rate = (float)Setting::get('exchange_rate', 4000);
+        $totalRefundKhr = $kCash + $kBank + ($uBank * $rate);
 
-        DB::transaction(function() use ($booking, $data, $kCash, $kBank, $totalRefund) {
+        DB::transaction(function() use ($booking, $data, $kCash, $kBank, $uBank, $totalRefundKhr, $rate) {
             $booking->update(['status' => 'Cancelled']);
             Room::where('id', $booking->room_id)->update(['status' => 'vacant', 'is_cleaned' => true]);
 
             PaymentTransaction::create([
                 'booking_id' => $booking->id,
-                'action' => 'Cancel Order Refund',
+                'action' => 'Refund',
                 'usd_cash' => 0,
                 'khr_cash' => -$kCash,
-                'usd_bank' => 0,
+                'usd_bank' => -$uBank,
                 'khr_bank' => -$kBank,
-                'exchange_rate' => 1,
-                'total_paid_usd' => -$totalRefund,
+                'exchange_rate' => $rate,
+                'total_paid_usd' => -$totalRefundKhr,
                 'shift' => $data['shift'] ?? 'Morning',
                 'handled_by' => $data['handled_by'] ?? 'Reception',
                 'notes' => 'Booking cancelled - refund recorded',
             ]);
         });
 
-        $room = $booking->room;
-        $refundText = ($totalRefund > 0) 
-            ? "Returned: KHR " . number_format($totalRefund)
-            : "Returned: KHR 0";
-
         try {
-            $telegram->sendToOperations(
-                "❌ BOOKING CANCELLED\n\n" .
-                "Room: {$room->room_number}\n" .
-                "Booking ID: {$booking->booking_code}\n" .
-                "Guest: {$booking->guest_name}\n" .
-                $refundText
-            );
+            $telegram->sendCancellation($booking, $kCash, $kBank, $uBank);
         } catch (\Throwable $e) {}
 
-        return redirect()->route('frontdesk');
+        return redirect()->route('frontdesk')->with('success', 'Booking cancelled successfully.');
     }
 }

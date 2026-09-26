@@ -11,7 +11,24 @@ use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
-class TelegramWebhookController extends Controller {
+class TelegramWebhookController extends Controller
+{
+    private function isAuthorizedCashUser(?string $username): bool
+    {
+        if (empty($username)) return false;
+        $username = strtolower(ltrim(trim($username), "@"));
+
+        $cfg = \App\Models\Setting::get("telegram_config", []);
+        if (is_string($cfg)) $cfg = json_decode($cfg, true) ?? [];
+        
+        $raw = $cfg["authorized_usernames"] ?? "pagnreach, muypor13";
+        $allowed = array_map(function($u) {
+            return strtolower(ltrim(trim($u), "@"));
+        }, explode(",", $raw));
+
+        return in_array($username, $allowed, true);
+    }
+
     public function handle(Request $request, TelegramService $telegram) {
         $update = $request->all();
 

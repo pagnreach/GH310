@@ -14,7 +14,20 @@ export default function Setup({
     const [activeSection, setActiveSection] = useState('PRICING');
     const [pricing, setPricing] = useState(pricingMatrix);
     const [rate, setRate] = useState(exchangeRate);
-    const [telegram, setTelegram] = useState(telegramConfig);
+    const [telegram, setTelegram] = useState({
+        bot_token: telegramConfig?.bot_token || '',
+        operations_chat_id: telegramConfig?.operations_chat_id || '',
+        housekeeping_chat_id: telegramConfig?.housekeeping_chat_id || '',
+        checkin_alert: Boolean(telegramConfig?.checkin_alert),
+        payment_alert: Boolean(telegramConfig?.payment_alert),
+        checkout_alert: Boolean(telegramConfig?.checkout_alert),
+        cleaning_task_alert: Boolean(telegramConfig?.cleaning_task_alert),
+        cancel_alert: Boolean(telegramConfig?.cancel_alert),
+        extend_stay_alert: Boolean(telegramConfig?.extend_stay_alert),
+        incoming_reactions: Boolean(telegramConfig?.incoming_reactions),
+        incoming_cash_commands: Boolean(telegramConfig?.incoming_cash_commands),
+        authorized_usernames: telegramConfig?.authorized_usernames ?? "pagnreach, muypor13",
+    });
     const [categories, setCategories] = useState(expenseCategories);
     const [newCategory, setNewCategory] = useState('');
 
@@ -206,10 +219,10 @@ export default function Setup({
 
                         {/* 2. TELEGRAM SETTINGS */}
                         {activeSection === 'TELEGRAM' && (
-                            <form onSubmit={saveTelegram} className="space-y-4">
+                            <form onSubmit={saveTelegram} className="space-y-5">
                                 <div>
                                     <h3 className="font-black text-sm text-slate-900">Telegram Bot & Channel Config</h3>
-                                    <p className="text-xs text-slate-500">Configure bot dispatch targets and test connections.</p>
+                                    <p className="text-xs text-slate-500">Configure bot dispatch targets, test connections, and manage independent triggers.</p>
                                 </div>
 
                                 <div className="space-y-3 text-xs">
@@ -220,14 +233,14 @@ export default function Setup({
                                             className="w-full border rounded px-3 py-1.5 bg-slate-50 font-mono text-xs"
                                             value={telegram.bot_token || ''}
                                             onChange={(e) => setTelegram({ ...telegram, bot_token: e.target.value })}
-                                            placeholder="e.g. 7859345228:AAH..."
+                                            placeholder="e.g. 8832979983:AAH..."
                                         />
                                     </div>
 
                                     {/* Operations Group */}
                                     <div className="border p-3 rounded-lg bg-slate-50/50 space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="font-bold text-slate-800">Operations Group (Check-in & Payments)</span>
+                                            <span className="font-bold text-slate-800">Operations Group (Check-in, Payments, Checkout, Alerts)</span>
                                             <button
                                                 type="button"
                                                 onClick={() => sendTestPing(telegram.operations_chat_id, 'Operations Group')}
@@ -266,36 +279,142 @@ export default function Setup({
                                         />
                                     </div>
 
-                                    {/* Alert Toggles */}
-                                    <div className="pt-2 border-t space-y-1.5">
-                                        <span className="font-bold text-slate-700 block text-[11px] uppercase">Alert Triggers</span>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={telegram.checkin_alert ?? true}
-                                                onChange={(e) => setTelegram({ ...telegram, checkin_alert: e.target.checked })}
-                                                className="rounded text-emerald-600"
-                                            />
-                                            <span>Send Check-in alerts to Operations</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={telegram.payment_alert ?? true}
-                                                onChange={(e) => setTelegram({ ...telegram, payment_alert: e.target.checked })}
-                                                className="rounded text-emerald-600"
-                                            />
-                                            <span>Send Additional Payment alerts to Operations</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={telegram.checkout_alert ?? true}
-                                                onChange={(e) => setTelegram({ ...telegram, checkout_alert: e.target.checked })}
-                                                className="rounded text-emerald-600"
-                                            />
-                                            <span>Dispatch cleaning task on Checkout</span>
-                                        </label>
+                                    {/* TWO-COLUMN SPLIT FOR TRIGGERS */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t">
+                                        
+                                        {/* 1. OUTGOING TRIGGERS */}
+                                        <div className="border rounded-lg p-3 bg-slate-50/50 space-y-2.5">
+                                            <div className="flex items-center gap-1.5 border-b pb-1.5">
+                                                <span className="text-base">📤</span>
+                                                <div>
+                                                    <span className="font-black text-slate-800 text-xs uppercase tracking-wide block">Outgoing Alerts</span>
+                                                    <span className="text-[10px] text-slate-500">From PMS to Telegram groups</span>
+                                                </div>
+                                            </div>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.checkin_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, checkin_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Send Check-in alerts to Operations</span>
+                                            </label>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.payment_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, payment_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Send Additional Payment alerts to Operations</span>
+                                            </label>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.checkout_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, checkout_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Send Checkout alerts to Operations</span>
+                                            </label>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.cleaning_task_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, cleaning_task_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Dispatch cleaning task on Checkout</span>
+                                            </label>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.cancel_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, cancel_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Send Booking Cancelled alerts to Operations</span>
+                                            </label>
+
+                                            <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(telegram.extend_stay_alert)}
+                                                    onChange={(e) => setTelegram({ ...telegram, extend_stay_alert: e.target.checked })}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                />
+                                                <span className="font-medium text-xs">Send Extend Stay alerts to Operations</span>
+                                            </label>
+                                        </div>
+
+                                        {/* 2. INCOMING PROCESSING & REACTIONS */}
+                                        <div className="border rounded-lg p-3 bg-slate-50/50 space-y-3">
+                                            <div className="flex items-center gap-1.5 border-b pb-1.5">
+                                                <span className="text-base">📥</span>
+                                                <div>
+                                                    <span className="font-black text-slate-800 text-xs uppercase tracking-wide block">Incoming Processing & Reactions</span>
+                                                    <span className="text-[10px] text-slate-500">From Telegram chat/reactions back into PMS</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Housekeeping Reactions */}
+                                            <div className="p-2.5 rounded-md bg-white border border-slate-200 space-y-1.5">
+                                                <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-bold">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(telegram.incoming_reactions)}
+                                                        onChange={(e) => setTelegram({ ...telegram, incoming_reactions: e.target.checked })}
+                                                        className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                    />
+                                                    <span className="text-xs">Process Housekeeping Reactions</span>
+                                                </label>
+                                                <div className="text-[11px] text-slate-600 pl-6 space-y-0.5">
+                                                    <div>👍 <b>Thumbs Up:</b> Marks room as cleaned and alerts Operations.</div>
+                                                    <div>👎 <b>Thumbs Down:</b> Logs room to Maintenance Log and alerts Operations.</div>
+                                                    <div>🙏 <b>Prayer Hands:</b> Logs item in Lost & Found and alerts Operations.</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Owner Cash / Bank Commands */}
+                                            <div className="p-2.5 rounded-md bg-white border border-slate-200 space-y-2">
+                                                <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-bold">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(telegram.incoming_cash_commands)}
+                                                        onChange={(e) => setTelegram({ ...telegram, incoming_cash_commands: e.target.checked })}
+                                                        className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                                    />
+                                                    <span className="text-xs">Process Cash & Bank Chat Commands</span>
+                                                </label>
+                                                
+                                                <div className="text-[11px] text-slate-600 pl-6 space-y-1">
+                                                    <div>💵 <b>Cash Drawer:</b> <code>took 50usd</code> / <code>return 200000khr</code></div>
+                                                    <div>🏦 <b>Bank Account:</b> <code>bank took 100usd</code> / <code>bank return 400000khr</code></div>
+                                                </div>
+
+                                                <div className="pt-2 pl-6 border-t border-slate-100">
+                                                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                                        Authorized Telegram Usernames
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g. pagnreach, muypor13"
+                                                        className="w-full border rounded px-2.5 py-1 text-xs font-mono bg-slate-50"
+                                                        value={telegram.authorized_usernames || ""}
+                                                        onChange={(e) => setTelegram({ ...telegram, authorized_usernames: e.target.value })}
+                                                    />
+                                                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                                                        Comma-separated. Commands from any other user in the group will be ignored.
+                                                    </span>
+                                                </div>
+                                            </div></div>
+
                                     </div>
                                 </div>
 

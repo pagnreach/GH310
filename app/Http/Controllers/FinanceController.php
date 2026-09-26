@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
+
 use App\Models\PaymentTransaction;
 use App\Models\Expense;
 use App\Models\CashDrawerAdjustment;
@@ -68,8 +70,8 @@ class FinanceController extends Controller {
             ->filter(fn($t) => Carbon::parse($t->transfer_date)->gte(Carbon::parse('2026-09-01')))
             ->sum('khr_amount');
 
-        $adminCashNetUSD = 70.00 + $adminTookUSD - $adminTransOutUSD;
-        $adminCashNetKHR = 1380000 + $adminTookKHR - $adminTransOutKHR;
+        $adminCashNetUSD =  0 + $adminTookUSD - $adminTransOutUSD;
+        $adminCashNetKHR = 0 + $adminTookKHR - $adminTransOutKHR;
 
         // 3. ACLEDA BANK ($3,884.01 & 9,787,400 KHR baseline)
         $newPayments = $payments->filter(fn($p) => Carbon::parse($p->created_at)->gte(Carbon::parse('2026-09-01')));
@@ -89,8 +91,8 @@ class FinanceController extends Controller {
         $acledaTransOutUSD = (float)$newTransfers->where('transfer_category', 'TRANSFER')->filter(fn($t) => str_starts_with($t->from_account, 'ACLEDA'))->sum('usd_amount');
         $acledaTransOutKHR = (float)$newTransfers->where('transfer_category', 'TRANSFER')->filter(fn($t) => str_starts_with($t->from_account, 'ACLEDA'))->sum('khr_amount');
 
-        $acledaNetUSD = 3884.01 + $acledaNewInUSD + $acledaTransInUSD - $acledaNewExpUSD - $acledaTransOutUSD;
-        $acledaNetKHR = 9787400 + $acledaNewInKHR + $acledaTransInKHR - $acledaNewExpKHR - $acledaTransOutKHR;
+        $acledaNetUSD = 0 + $acledaNewInUSD + $acledaTransInUSD - $acledaNewExpUSD - $acledaTransOutUSD;
+        $acledaNetKHR = 0 + $acledaNewInKHR + $acledaTransInKHR - $acledaNewExpKHR - $acledaTransOutKHR;
 
         // 4. WING BANK ($5,918.85 & 5,948,594 KHR baseline)
         $wingNewInterest = $transfers->where('transfer_category', 'DEPOSIT')
@@ -110,8 +112,8 @@ class FinanceController extends Controller {
         $wingTransOutUSD = (float)$newTransfers->where('transfer_category', 'TRANSFER')->filter(fn($t) => str_starts_with($t->from_account, 'Wing'))->sum('usd_amount');
         $wingTransOutKHR = (float)$newTransfers->where('transfer_category', 'TRANSFER')->filter(fn($t) => str_starts_with($t->from_account, 'Wing'))->sum('khr_amount');
 
-        $wingNetUSD = 5918.85 + $wingNewIntUSD + $wingTransInUSD - $wingNewExpUSD - $wingTransOutUSD;
-        $wingNetKHR = 5948594 + $wingNewIntKHR + $wingTransInKHR - $wingNewExpKHR - $wingTransOutKHR;
+        $wingNetUSD = 0 + $wingNewIntUSD + $wingTransInUSD - $wingNewExpUSD - $wingTransOutUSD;
+        $wingNetKHR = 0 + $wingNewIntKHR + $wingTransInKHR - $wingNewExpKHR - $wingTransOutKHR;
 
         return [
             'cashier_khr'  => $liveCashierKHR,
@@ -184,11 +186,11 @@ class FinanceController extends Controller {
 
         $depUSD = (float)$payments->sum('usd_bank') + (float)$payments->sum('usd_cash') + (float)$interestDeposits->sum('usd_amount');
         $depKHR = (float)$payments->sum('khr_bank') + (float)$payments->sum('khr_cash') + (float)$interestDeposits->sum('khr_amount');
-        $depEq = $depUSD + ($depKHR / 4000);
+        $depEq = $depUSD + ($depKHR / Setting::get('exchange_rate', 4000));
 
         $expUSD = (float)$expenses->sum('amount_usd');
         $expKHR = (float)$expenses->sum('amount_khr');
-        $expEq = $expUSD + ($expKHR / 4000);
+        $expEq = $expUSD + ($expKHR / Setting::get('exchange_rate', 4000));
 
         $netProfitUSD = $depEq - $expEq;
         $balances = self::getAccountBalances();
@@ -286,6 +288,7 @@ class FinanceController extends Controller {
         $sortedLog = $combinedLog->sortByDesc('created_at')->values()->all();
 
         return Inertia::render('Reports/Finance', [
+            "exchangeRate" => (float)Setting::get("exchange_rate", 4000),
             'preset' => $preset,
             'customDate' => $customDate,
             'customMonth' => $customMonth,
@@ -304,17 +307,17 @@ class FinanceController extends Controller {
                 'cash_admin' => [
                     'khr' => $balances['Cash We Took']['khr'],
                     'usd' => $balances['Cash We Took']['usd'],
-                    'total_usd_eq' => $balances['Cash We Took']['usd'] + ($balances['Cash We Took']['khr'] / 4000),
+                    'total_usd_eq' => $balances['Cash We Took']['usd'] + ($balances['Cash We Took']['khr'] / Setting::get('exchange_rate', 4000)),
                 ],
                 'acleda' => [
                     'khr' => $balances['ACLEDA']['khr'],
                     'usd' => $balances['ACLEDA']['usd'],
-                    'total_usd_eq' => $balances['ACLEDA']['usd'] + ($balances['ACLEDA']['khr'] / 4000),
+                    'total_usd_eq' => $balances['ACLEDA']['usd'] + ($balances['ACLEDA']['khr'] / Setting::get('exchange_rate', 4000)),
                 ],
                 'wing' => [
                     'khr' => $balances['Wing']['khr'],
                     'usd' => $balances['Wing']['usd'],
-                    'total_usd_eq' => $balances['Wing']['usd'] + ($balances['Wing']['khr'] / 4000),
+                    'total_usd_eq' => $balances['Wing']['usd'] + ($balances['Wing']['khr'] / Setting::get('exchange_rate', 4000)),
                 ],
             ],
             'transfers' => $sortedLog,
@@ -405,7 +408,7 @@ class FinanceController extends Controller {
             'khr_amount' => (float)($data['khr_amount'] ?? 0),
             'trans_month' => (int)$parsedDate->format('m'),
             'trans_year' => (int)$parsedDate->format('Y'),
-            'exchange_rate' => 4000,
+            'exchange_rate' => Setting::get('exchange_rate', 4000),
             'notes' => $data['notes'],
             'recorded_by' => 'Admin',
             'created_at' => $parsedDate,
@@ -435,7 +438,7 @@ class FinanceController extends Controller {
             'khr_amount' => (float)($data['khr_amount'] ?? 0),
             'trans_month' => (int)$parsedDate->format('m'),
             'trans_year' => (int)$parsedDate->format('Y'),
-            'exchange_rate' => 4000,
+            'exchange_rate' => Setting::get('exchange_rate', 4000),
             'notes' => "Deposit: " . ($data['notes'] ?: $data['source']),
             'recorded_by' => 'Admin',
             'created_at' => $parsedDate,

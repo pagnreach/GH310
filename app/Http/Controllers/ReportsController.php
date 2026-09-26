@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
+
 use App\Models\Booking;
 use App\Models\Expense;
 use App\Models\Room;
@@ -53,7 +55,7 @@ class ReportsController extends Controller {
         $expenses = $expenseQuery->get();
         $adjustments = $adjQuery->get();
 
-        $periodExpensesKHR = (float)$expenses->sum(fn($e) => ((float)$e->amount_khr + ((float)$e->amount_usd * 4000)));
+        $periodExpensesKHR = (float)$expenses->sum(fn($e) => ((float)$e->amount_khr + ((float)$e->amount_usd * Setting::get('exchange_rate', 4000))));
 
         $entries = collect();
 
@@ -65,7 +67,7 @@ class ReportsController extends Controller {
                 'expense_category' => $e->expense_category,
                 'amount_khr' => (float)$e->amount_khr,
                 'amount_usd' => (float)$e->amount_usd,
-                'total_khr_eq' => (float)$e->amount_khr + ((float)$e->amount_usd * 4000),
+                'total_khr_eq' => (float)$e->amount_khr + ((float)$e->amount_usd * Setting::get('exchange_rate', 4000)),
                 'payment_method' => $e->payment_method,
                 'paid_by' => $e->paid_by ?: 'Reception',
                 'notes' => $e->notes,
@@ -82,7 +84,7 @@ class ReportsController extends Controller {
                     'expense_category' => 'Cash Withdrawal',
                     'amount_khr' => (float)$a->khr_amount,
                     'amount_usd' => (float)$a->usd_amount,
-                    'total_khr_eq' => (float)$a->khr_amount + ((float)$a->usd_amount * 4000),
+                    'total_khr_eq' => (float)$a->khr_amount + ((float)$a->usd_amount * Setting::get('exchange_rate', 4000)),
                     'payment_method' => str_contains($a->action, 'BANK') ? 'ABA Bank' : 'KHR Cash',
                     'paid_by' => $a->username,
                     'notes' => $a->raw_message,
@@ -94,7 +96,7 @@ class ReportsController extends Controller {
         $combinedSorted = $entries->sortByDesc('created_at')->values()->all();
 
         $allCashIn = (float)PaymentTransaction::sum('khr_cash');
-        $allCashExpenses = (float)Expense::whereIn('payment_method', ['KHR Cash', 'Cash at Cashier', 'Cash'])->sum(fn($e) => ((float)$e->amount_khr + ((float)$e->amount_usd * 4000)));
+        $allCashExpenses = (float)Expense::whereIn('payment_method', ['KHR Cash', 'Cash at Cashier', 'Cash'])->sum(fn($e) => ((float)$e->amount_khr + ((float)$e->amount_usd * Setting::get('exchange_rate', 4000))));
         $allCashTook = (float)CashDrawerAdjustment::where('action', 'TOOK')->sum('khr_amount');
         $allCashReturn = (float)CashDrawerAdjustment::where('action', 'RETURN')->sum('khr_amount');
 
@@ -149,7 +151,7 @@ class ReportsController extends Controller {
             $availUsd = $balances[$accountKey]['usd'];
 
             if ($accountKey === 'Cash at Cashier') {
-                $totalKhrReq = $khr + ($usd * 4000);
+                $totalKhrReq = $khr + ($usd * Setting::get('exchange_rate', 4000));
                 if ($totalKhrReq > $availKhr) {
                     return redirect()->back()->withErrors([
                         'amount' => "Insufficient Cash in Cashier Drawer! Available: " . number_format($availKhr) . " KHR"

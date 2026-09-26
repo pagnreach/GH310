@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
+
 use App\Models\Room;
 use App\Models\Booking;
 use App\Models\PaymentTransaction;
@@ -53,6 +55,8 @@ class FrontDeskController extends Controller
         $nextGuestCode = 'G' . str_pad($realCount + 1, 3, '0', STR_PAD_LEFT);
 
         return Inertia::render('FrontDesk', [
+            "pricingMatrix" => Setting::get("pricing_matrix", []),
+            "exchangeRate" => Setting::get("exchange_rate", 4000),
             'rooms' => $rooms,
             'selectedDate' => $selectedDate,
             'isToday' => $isToday,
@@ -80,7 +84,7 @@ class FrontDeskController extends Controller
             $cashKhr = (float)$request->input('khr_cash', $request->input('cash_khr', 0));
             $bankKhr = (float)$request->input('khr_bank', $request->input('bank_khr', 0));
             $bankUsd = (float)$request->input('usd_bank', $request->input('bank_usd', 0));
-            $paidKhr = $cashKhr + $bankKhr + ($bankUsd * 4000);
+            $paidKhr = $cashKhr + $bankKhr + ($bankUsd * Setting::get('exchange_rate', 4000));
 
             PaymentTransaction::create([
                 'booking_id' => $booking->id,
@@ -89,7 +93,7 @@ class FrontDeskController extends Controller
                 'khr_cash' => $cashKhr,
                 'usd_bank' => $bankUsd,
                 'khr_bank' => $bankKhr,
-                'exchange_rate' => 4000,
+                'exchange_rate' => Setting::get('exchange_rate', 4000),
                 'total_paid_usd' => $paidKhr,
                 'shift' => $request->input('shift', now()->hour < 15 ? 'Morning' : 'Night'),
                 'handled_by' => $request->input('handled_by', auth()->user()->name ?? 'Reception'),
@@ -104,7 +108,13 @@ class FrontDeskController extends Controller
                 'balance_usd' => $newBalance,
             ]);
 
-            return redirect()->back()->with('success', 'Order recorded successfully.');
+            
+            try {
+                $roomNo = $booking->room ? $booking->room->room_number : "Unknown";
+                app(\App\Services\TelegramService::class)->sendPayment($roomNo, 0, $cashKhr, $bankUsd, $bankKhr, $newBalance, $booking->guest_name);
+            } catch (\Throwable $e) {}
+
+            return redirect()->back()->with("success", "Order recorded successfully.");
         }
 
         $data = $request->validate([
@@ -141,7 +151,7 @@ class FrontDeskController extends Controller
         $cashKhr = (float)($data['khr_cash'] ?? $data['cash_khr'] ?? 0);
         $bankKhr = (float)($data['khr_bank'] ?? $data['bank_khr'] ?? 0);
         $bankUsd = (float)($data['usd_bank'] ?? $data['bank_usd'] ?? 0);
-        $totalPaidKhr = $cashKhr + $bankKhr + ($bankUsd * 4000);
+        $totalPaidKhr = $cashKhr + $bankKhr + ($bankUsd * Setting::get('exchange_rate', 4000));
         $balanceKhr = max(0, $totalChargeKhr - $totalPaidKhr);
 
         $realCount = Booking::where('booking_code', 'NOT LIKE', 'B%')
@@ -171,12 +181,12 @@ class FrontDeskController extends Controller
         if ($totalPaidKhr > 0) {
             PaymentTransaction::create([
                 'booking_id' => $booking->id,
-                'action' => 'Check In',
+                'action' => 'Add Order',
                 'usd_cash' => 0,
                 'khr_cash' => $cashKhr,
                 'usd_bank' => $bankUsd,
                 'khr_bank' => $bankKhr,
-                'exchange_rate' => 4000,
+                'exchange_rate' => Setting::get('exchange_rate', 4000),
                 'total_paid_usd' => $totalPaidKhr,
                 'shift' => $data['shift'] ?? (now()->hour < 15 ? 'Morning' : 'Night'),
                 'handled_by' => $data['handled_by'] ?? (auth()->user()->name ?? 'Reception'),
@@ -188,6 +198,12 @@ class FrontDeskController extends Controller
             'status' => 'occupied',
             'is_cleaned' => true,
         ]);
+
+        try {
+            app(\App\Services\TelegramService::class)->sendCheckIn($booking, $cashKhr, $bankKhr, $bankUsd);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Telegram Check-in dispatch failed: " . $e->getMessage());
+        }
 
         return redirect()->back()->with('success', 'Guest checked in successfully.');
     }
@@ -215,6 +231,19 @@ class FrontDeskController extends Controller
             'balance_usd' => $newBalance,
         ]);
 
+        try {
+            $telegram = app(\App\Services\TelegramService::class);
+            $extraNights = (int)($request->input("extra_nights", $data["extra_nights"] ?? 1));
+            $extraCharge = (float)($data["extra_charge"] ?? $request->input("extra_charge", 0));
+            $paidNow = (float)($paidKhr ?? $totalPaidKhr ?? $request->input("paid_khr", 0));
+
+            $telegram->sendExtendStay($booking, $extraNights, $extraCharge, $paidNow);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Extend Stay Telegram dispatch failed: " . $e->getMessage());
+        }
+
+
+
         return redirect()->back()->with('success', "Booking extended by {$extraNights} night(s).");
     }
 
@@ -225,21 +254,33 @@ class FrontDeskController extends Controller
 
     public function checkout(Request $request, $id)
     {
-        $booking = Booking::with('room')->findOrFail($id);
+        $booking = ($id instanceof \App\Models\Booking) ? $id : \App\Models\Booking::with("room")->findOrFail($id);
 
         $booking->update([
-            'status' => 'Checked Out',
-            'check_out' => today()->toDateString(),
+            "status" => "Checked Out",
         ]);
 
         if ($booking->room) {
             $booking->room->update([
-                'status' => 'vacant',
-                'is_cleaned' => false,
+                "status" => "vacant",
+                "is_cleaned" => false,
             ]);
         }
 
-        return redirect()->back()->with('success', 'Guest checked out successfully.');
+        try {
+            $telegram = app(\App\Services\TelegramService::class);
+            $roomNo = $booking->room ? $booking->room->room_number : "Unknown";
+
+            $telegram->sendCheckout($booking);
+
+            if ($telegram->isAlertEnabled("cleaning_task_alert")) {
+                $telegram->sendHousekeepingTask($roomNo, $booking->booking_code ?? "G" . $booking->id);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Checkout Telegram dispatch failed: " . $e->getMessage());
+        }
+
+        return redirect()->back()->with("success", "Guest checked out successfully.");
     }
 
     public function toggleCleaning($id)

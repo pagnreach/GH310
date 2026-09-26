@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Http;
 class SettingController extends Controller {
     public function index() {
         return Inertia::render('Setup/Index', [
-            'pricingMatrix' => Setting::get('pricing_matrix'),
+            'pricingMatrix' => Setting::get('pricing_matrix', []),
             'exchangeRate' => Setting::get('exchange_rate', 4000),
             'telegramConfig' => Setting::get('telegram_config', [
                 'bot_token' => '',
@@ -20,6 +20,12 @@ class SettingController extends Controller {
                 'checkin_alert' => true,
                 'payment_alert' => true,
                 'checkout_alert' => true,
+                'cleaning_task_alert' => true,
+                'cancel_alert' => true,
+                'extend_stay_alert' => true,
+                'incoming_reactions' => true,
+                'incoming_cash_commands' => true,
+                'authorized_usernames' => 'pagnreach, muypor13',
             ]),
             'expenseCategories' => Setting::get('expense_categories', []),
             'accountsList' => Setting::get('accounts_list', []),
@@ -47,14 +53,19 @@ class SettingController extends Controller {
     }
 
     public function updateTelegram(Request $request) {
-        $data = $request->validate([
-            'bot_token' => 'nullable|string',
-            'operations_chat_id' => 'nullable|string',
-            'housekeeping_chat_id' => 'nullable|string',
-            'checkin_alert' => 'boolean',
-            'payment_alert' => 'boolean',
-            'checkout_alert' => 'boolean',
-        ]);
+        $data = [
+            'bot_token' => (string)$request->input('bot_token', ''),
+            'operations_chat_id' => (string)$request->input('operations_chat_id', ''),
+            'housekeeping_chat_id' => (string)$request->input('housekeeping_chat_id', ''),
+            'checkin_alert' => filter_var($request->input('checkin_alert'), FILTER_VALIDATE_BOOLEAN),
+            'payment_alert' => filter_var($request->input('payment_alert'), FILTER_VALIDATE_BOOLEAN),
+            'checkout_alert' => filter_var($request->input('checkout_alert'), FILTER_VALIDATE_BOOLEAN),
+            'cleaning_task_alert' => filter_var($request->input('cleaning_task_alert'), FILTER_VALIDATE_BOOLEAN),
+            'cancel_alert' => filter_var($request->input('cancel_alert'), FILTER_VALIDATE_BOOLEAN),
+            'extend_stay_alert' => filter_var($request->input('extend_stay_alert'), FILTER_VALIDATE_BOOLEAN),
+            'incoming_reactions' => filter_var($request->input('incoming_reactions'), FILTER_VALIDATE_BOOLEAN),
+            'incoming_cash_commands' => filter_var($request->input('incoming_cash_commands'), FILTER_VALIDATE_BOOLEAN),
+        ];
 
         Setting::set('telegram_config', $data);
         return redirect()->back()->with('success', 'Telegram configuration saved.');
@@ -63,7 +74,8 @@ class SettingController extends Controller {
     public function testTelegram(Request $request) {
         $chatId = $request->input('chat_id');
         $target = $request->input('target', 'Chat');
-        $token = Setting::get('telegram_config')['bot_token'] ?? env('TELEGRAM_BOT_TOKEN');
+        $cfg = Setting::get('telegram_config', []);
+        $token = $cfg['bot_token'] ?? env('TELEGRAM_BOT_TOKEN');
 
         if (!$token || !$chatId) {
             return redirect()->back()->withErrors(['telegram' => 'Bot token or Chat ID is missing.']);

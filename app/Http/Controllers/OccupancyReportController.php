@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Setting;
+
 use App\Models\Booking;
 use App\Models\Room;
 use App\Models\PaymentTransaction;

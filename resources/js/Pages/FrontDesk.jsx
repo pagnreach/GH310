@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { router } from '@inertiajs/react';
 import Navbar from '@/Components/Navbar';
 
-export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G001', selectedDate, isToday, pricingMatrix }) {
+export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G001', selectedDate, isToday, pricingMatrix, exchangeRate = 4000 }) {
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [activeModal, setActiveModal] = useState(null);
     const [activeDropdownRoomId, setActiveDropdownRoomId] = useState(null);
@@ -156,7 +156,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
         const kCash = parseFloat(form.khr_cash) || 0;
         const kBank = parseFloat(form.khr_bank) || 0;
         const uBank = parseFloat(form.usd_bank) || 0;
-        return kCash + kBank + (uBank * 4000);
+        return kCash + kBank + (uBank * (Number(exchangeRate) || 4000));
     };
 
     const calculateTotalRefundKHR = () => {
@@ -304,7 +304,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
         } else if (type === "bank_khr") {
             targetSetter(prev => ({ ...prev, khr_cash: "", khr_bank: total, usd_bank: "" }));
         } else if (type === "bank_usd") {
-            const usd = (total / 4000).toFixed(2);
+            const usd = (total / (Number(exchangeRate) || 4000)).toFixed(2);
             targetSetter(prev => ({ ...prev, khr_cash: "", khr_bank: "", usd_bank: usd }));
         }
     };
@@ -317,7 +317,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
         } else if (type === "bank_khr") {
             setForm(prev => ({ ...prev, khr_cash: "", khr_bank: total, usd_bank: "" }));
         } else if (type === "bank_usd") {
-            const usd = (total / 4000).toFixed(2);
+            const usd = (total / (Number(exchangeRate) || 4000)).toFixed(2);
             setForm(prev => ({ ...prev, khr_cash: "", khr_bank: "", usd_bank: usd }));
         }
     };
@@ -328,7 +328,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
         const cashKhr = parseFloat(form.khr_cash || 0);
         const bankKhr = parseFloat(form.khr_bank || 0);
         const bankUsd = parseFloat(form.usd_bank || 0);
-        const totalPaid = cashKhr + bankKhr + (bankUsd * 4000);
+        const totalPaid = (cashKhr + bankKhr + (bankUsd * (exchangeRate || 4000)));
 
         if (totalPaid !== due) {
             const diff = due - totalPaid;
@@ -878,7 +878,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bank USD ($1 = 4000៛)</label>
+                                            <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bank USD ($1 = ${exchangeRate}៛)</label>
                                             <div className="flex gap-1">
                                                 <input
                                                     type="number"
@@ -979,7 +979,7 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bank USD ($1 = 4000៛)</label>
+                                            <label className="text-[9px] text-slate-500 font-bold block mb-0.5">Bank USD ($1 = ${exchangeRate}៛)</label>
                                             <div className="flex gap-1">
                                                 <input
                                                     type="number"
@@ -1141,44 +1141,102 @@ export default function FrontDesk({ rooms, kpi, cashDrawer, nextGuestCode = 'G00
                             Guest: <strong>{selectedRoom.active_booking.guest_name}</strong> | Total Paid: <strong className="text-emerald-600">{Number(selectedRoom.active_booking.total_paid_usd).toLocaleString()} KHR</strong>
                         </div>
                         <form onSubmit={submitCancel} className="space-y-3 text-xs">
-                            <div className="border rounded p-2.5 bg-rose-50/50 space-y-2">
-                                <span className="font-extrabold text-[10px] uppercase text-slate-500 block">Refund Amount (KHR)</span>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label className="text-[10px] text-slate-600 font-bold">KHR Cash Refund</label>
+                            <div className="border border-slate-300 rounded-lg p-3 bg-white space-y-3">
+                                <span className="font-extrabold text-[10px] tracking-wider text-slate-500 uppercase block">REFUND RETURNED NOW</span>
+
+                                {/* Physical Cash */}
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Physical Cash (KHR only)</label>
+                                    <div className="flex gap-2">
                                         <input
                                             type="number"
-                                            step="500"
-                                            className="w-full border rounded px-2 py-1.5 bg-white font-semibold text-slate-900"
-                                            value={refundForm.refund_khr_cash}
-                                            onChange={(e) => setRefundForm({ ...refundForm, refund_khr_cash: e.target.value })}
-                                            placeholder="0"
+                                            className="w-full border rounded px-2.5 py-1.5 font-bold"
+                                            value={refundForm?.refund_khr_cash ?? ""}
+                                            onChange={(e) => setRefundForm(prev => ({ ...prev, refund_khr_cash: Number(e.target.value) }))}
+                                            placeholder="0 KHR"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] text-blue-700 font-bold">ABA Bank Refund</label>
-                                        <input
-                                            type="number"
-                                            step="500"
-                                            className="w-full border rounded px-2 py-1.5 bg-white font-semibold text-blue-900"
-                                            value={refundForm.refund_khr_bank}
-                                            onChange={(e) => setRefundForm({ ...refundForm, refund_khr_bank: e.target.value })}
-                                            placeholder="0"
-                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const paid = Number(selectedRoom?.active_booking?.total_paid_usd || 0);
+                                                setRefundForm(prev => ({ ...prev, refund_khr_cash: paid, refund_khr_bank: 0, refund_usd_bank: 0 }));
+                                            }}
+                                            className="px-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold rounded cursor-pointer transition text-xs"
+                                        >
+                                            Fill
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="text-right font-black text-xs pt-1 text-rose-700">
-                                    Total Refund: {calculateTotalRefundKHR().toLocaleString()} KHR
+
+                                {/* ABA Bank */}
+                                <div className="border-t pt-2 space-y-2">
+                                    <span className="block text-[11px] font-bold text-blue-700">ABA BANK (KHR / USD)</span>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-600 mb-1">Bank KHR</label>
+                                            <div className="flex gap-1.5">
+                                                <input
+                                                    type="number"
+                                                    className="w-full border rounded px-2 py-1.5 font-bold"
+                                                    value={refundForm?.refund_khr_bank ?? ""}
+                                                    onChange={(e) => setRefundForm(prev => ({ ...prev, refund_khr_bank: Number(e.target.value) }))}
+                                                    placeholder="0 KHR"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const paid = Number(selectedRoom?.active_booking?.total_paid_usd || 0);
+                                                        setRefundForm(prev => ({ ...prev, refund_khr_bank: paid, refund_khr_cash: 0, refund_usd_bank: 0 }));
+                                                    }}
+                                                    className="px-2 bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold rounded cursor-pointer transition text-xs"
+                                                >
+                                                    Fill
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-600 mb-1">Bank USD ($1 = {Number(exchangeRate || 4000).toLocaleString()}៛)</label>
+                                            <div className="flex gap-1.5">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="w-full border rounded px-2 py-1.5 font-bold"
+                                                    value={refundForm?.refund_usd_bank ?? ""}
+                                                    onChange={(e) => setRefundForm(prev => ({ ...prev, refund_usd_bank: Number(e.target.value) }))}
+                                                    placeholder="$0.00"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const paid = Number(selectedRoom?.active_booking?.total_paid_usd || 0);
+                                                        const rate = Number(exchangeRate) || 4000;
+                                                        setRefundForm(prev => ({ ...prev, refund_usd_bank: parseFloat((paid / rate).toFixed(2)), refund_khr_cash: 0, refund_khr_bank: 0 }));
+                                                    }}
+                                                    className="px-2 bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold rounded cursor-pointer transition text-xs"
+                                                >
+                                                    Fill
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-right font-black text-xs pt-1 text-slate-800">
+                                    Total Refund: {(
+                                        Number(refundForm?.refund_khr_cash || 0) +
+                                        Number(refundForm?.refund_khr_bank || 0) +
+                                        (Number(refundForm?.refund_usd_bank || 0) * (Number(exchangeRate) || 4000))
+                                    ).toLocaleString()} KHR
                                 </div>
                             </div>
+
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className={`w-full font-black py-2 rounded shadow transition ${
-                                    isSubmitting ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
-                                }`}
+                                className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-lg cursor-pointer transition shadow"
                             >
-                                {isSubmitting ? 'Processing Cancellation...' : 'Confirm Cancellation & Process Refund'}
+                                {isSubmitting ? "Processing..." : "Confirm Cancellation & Process Refund"}
                             </button>
                         </form>
                     </div>

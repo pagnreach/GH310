@@ -2,16 +2,14 @@ import React, { useState, useMemo } from 'react';
 import Navbar from '@/Components/Navbar';
 import { router } from '@inertiajs/react';
 
-export default function Finance({
-    preset = 'MONTH',
+export default function Finance({ preset = 'MONTH',
     customDate,
     customMonth,
     customYear,
     summary,
     accounts,
     cashier_cash = 0,
-    transfers = [],
-}) {
+    transfers = [], exchangeRate = 4000 }) {
     const todayStr = new Date().toISOString().split('T')[0];
     const defaultMonth = customMonth || '2026-08';
     const defaultYear = customYear || '2026';
@@ -160,14 +158,14 @@ export default function Finance({
     const getConversionPreview = () => {
         const val = parseFloat(convertForm.amount_input) || 0;
         if (convertDirection === 'KHR_TO_USD') {
-            const usd = val / 4000;
+            const usd = val / (Number(exchangeRate) || 4000);
             return {
                 usdOutput: usd > 0 ? `$${usd.toFixed(2)}` : '$0.00',
                 khrInput: val,
                 usdVal: usd,
             };
         } else {
-            const khr = val * 4000;
+            const khr = val * (Number(exchangeRate) || 4000);
             return {
                 khrOutput: khr > 0 ? `${khr.toLocaleString()}៛` : '0៛',
                 usdInput: val,
@@ -429,7 +427,7 @@ export default function Finance({
 
     const totalLiquidityUSD = (accounts.cash_admin.usd || 0) + (accounts.acleda.usd || 0) + (accounts.wing.usd || 0);
     const totalLiquidityKHR = (accounts.cash_admin.khr || 0) + (accounts.acleda.khr || 0) + (accounts.wing.khr || 0);
-    const totalLiquidityEq = totalLiquidityUSD + (totalLiquidityKHR / 4000);
+    const totalLiquidityEq = totalLiquidityUSD + (totalLiquidityKHR / (Number(exchangeRate) || 4000));
 
     return (
         <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -1234,7 +1232,7 @@ export default function Finance({
 
                                 <div className="bg-purple-50 p-3 rounded-lg border border-purple-200 space-y-2">
                                     <div className="text-[10px] font-black text-purple-900 uppercase">
-                                        Rate: $1 = 4,000 KHR
+                                        RATE: $1 = {Number(exchangeRate || 4000).toLocaleString()} KHR
                                     </div>
 
                                     {convertDirection === 'KHR_TO_USD' ? (
@@ -1243,7 +1241,7 @@ export default function Finance({
                                             <input
                                                 type="number"
                                                 step="500"
-                                                placeholder="e.g. 40000"
+                                                placeholder={`e.g. ${(Number(exchangeRate) || 4000) * 10}`}
                                                 className="w-full border rounded px-2.5 py-1.5 bg-white font-black text-slate-900 text-sm"
                                                 value={convertForm.amount_input}
                                                 onChange={(e) => setConvertForm({ ...convertForm, amount_input: e.target.value })}
