@@ -1,0 +1,175 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 LucidaGrande;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 ### The Golden Rule: Separating Code from Data\
+\
+To avoid confusion, remember one core rule:\
+\
+* **Code goes to Git** (tracked on GitHub, pulled onto the server).\
+* **Data (SQLite) never goes to Git** (it lives only on the live server and in offline backups).\
+\
+---\
+\
+### Part 1: How to Keep Track of Local, Git, and Live\
+\
+Think of the workflow as a simple one-way pipeline: **Local Mac 
+\f1 \uc0\u8594 
+\f0  GitHub 
+\f1 \uc0\u8594 
+\f0  Oracle Live Server**.\
+\
+```\
+[Local Mac] \uc0\u9472 \u9472 \u9472 \u9472 (git push)\u9472 \u9472 \u9472 \u9472 
+\f1 \uc0\u9658 
+\f0  [GitHub] \uc0\u9472 \u9472 \u9472 \u9472 (git pull)\u9472 \u9472 \u9472 \u9472 
+\f1 \uc0\u9658 
+\f0  [Oracle Server]\
+     \uc0\u9474                                                                \u9474 \
+ (Dev/Test)                                                    (Live Guests)\
+\
+```\
+\
+**1. Development (Local Mac):**\
+\
+* Work on code features, UI, or bugs locally.\
+* Test with `php artisan serve` and `npm run dev`.\
+* Commit and push changes:\
+```bash\
+git add .\
+git commit -m "feat: added new feature"\
+git push origin main\
+\
+```\
+\
+\
+\
+**2. Deployment (Oracle Server):**\
+\
+* SSH into your server:\
+```bash\
+ssh -i ~/.ssh/oracle_gh310.key ubuntu@134.185.83.115\
+\
+```\
+\
+\
+* Pull the latest code and refresh:\
+```bash\
+cd /var/www/gh310-pms\
+git pull origin main\
+npm run build\
+php artisan optimize:clear\
+\
+```\
+\
+\
+* Your live database remains untouched while the code updates instantly.\
+\
+---\
+\
+### Part 2: What If Oracle Dies or Data Is Lost?\
+\
+Because SQLite is just a single file (`/var/www/gh310-pms/database/database.sqlite`), **backing it up is as simple as copying that file**. If Oracle crashes, burns, or deletes the instance, having that file means zero data loss.\
+\
+Here is the 2-layer safety net:\
+\
+#### 1. Automated Nightly Backups on the Server\
+\
+Set up a daily cron job that copies the database and keeps the last 7 days of history on the VM:\
+\
+1. Create a backup folder on the server:\
+```bash\
+sudo mkdir -p /var/backups/pms-db\
+sudo chown -R ubuntu:ubuntu /var/backups/pms-db\
+\
+```\
+\
+\
+2. Open cron tasks:\
+```bash\
+crontab -e\
+\
+```\
+\
+\
+3. Add this line at the bottom (runs automatically every night at 3:00 AM):\
+```bash\
+0 3 * * * sqlite3 /var/www/gh310-pms/database/database.sqlite ".backup '/var/backups/pms-db/pms_$(date +\\%Y\\%m\\%d_\\%H\\%M\\%S).sqlite'"\
+\
+```\
+\
+\
+*(Using `sqlite3 ... .backup` safely snapshots the database even while guests or staff are actively using it).*\
+\
+#### 2. One-Command Sync to Your Mac\
+\
+Backups stored on Oracle won't help if Oracle itself goes down. You should occasionally pull a copy straight to your Mac.\
+\
+On your **Mac terminal**, create a tiny alias or shell command:\
+\
+```bash\
+# Add this to your ~/.zshrc on your Mac\
+echo "alias pms-backup='scp -i ~/.ssh/oracle_gh310.key ubuntu@134.185.83.115:/var/www/gh310-pms/database/database.sqlite ~/Backups/gh310/pms_live_\\$(date +%Y%m%d_%H%M%S).sqlite'" >> ~/.zshrc\
+source ~/.zshrc\
+\
+```\
+\
+Whenever you want an offline safety copy, simply type:\
+\
+```bash\
+pms-backup\
+\
+```\
+\
+Your Mac downloads the live database in two seconds.\
+\
+---\
+\
+### Part 3: Worst-Case Disaster Recovery\
+\
+If the Oracle instance is completely destroyed:\
+\
+1. Spin up a new VM (or use any other host).\
+2. Clone the code: `git clone git@github.com:pagnreach/GH310.git .`\
+3. Push your downloaded backup back up:\
+```bash\
+scp -i your-key.key ~/Backups/gh310/pms_live_LATEST.sqlite ubuntu@NEW_IP:/var/www/gh310-pms/database/database.sqlite\
+\
+```\
+\
+\
+4. Set permissions to `www-data` and your system is 100% restored.\
+\
+Would you like to automate pushing backups directly to a private cloud storage (like Google Drive, Telegram, or S3) so you never even have to think about manual downloads?\
+\
+\
+\
+\
+\
+That is correct. If this server ever crashes or is permanently lost, you can recover everything in about 5 minutes using that exact strategy:\
+\
+Clone the code on a fresh server or your Mac:\
+\
+Bash\
+git clone git@github.com:pagnreach/GH310.git .\
+Download the latest .sqlite file from your GH310 Backup Telegram chat and drop it into database/database.sqlite.\
+\
+Configure environment & build assets:\
+\
+Bash\
+cp .env.example .env\
+# Set DB_CONNECTION=sqlite and DB_DATABASE path in .env\
+composer install --no-dev --optimize-autoloader\
+npm install && npm run build\
+php artisan key:generate\
+Fix permissions:\
+\
+Bash\
+sudo chown -R www-data:www-data storage bootstrap/cache database\
+sudo chmod -R 775 storage bootstrap/cache database\
+sudo chmod 664 database/database.sqlite\
+php artisan optimize:clear\
+Because your entire application state (bookings, settings, rooms, transactions, logs) lives inside that single SQLite file, restoring that one file restores the entire hotel system without missing a beat.}
